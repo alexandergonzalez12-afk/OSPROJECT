@@ -1,6 +1,204 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <unistd.h>
+#include <ncurses.h>
+#include "functions.h"
+
+#define TRAIL_LENGTH 5  // Number of trailing positions to clear
+
+/**
+ * @brief Reads coordinates from a binary file and plots them in the terminal
+ *        with a trailing effect. Stops when the last coordinate is reached.
+ * @return 0 if the program exits successfully.
+ */
+int main() {
+    const char *binary_file_path = "mouse_data.dat";  // Path to the binary file
+    FILE *binary_input_file = fopen(binary_file_path, "rb");
+
+    if (!binary_input_file) {
+        perror("Error opening binary file");
+        return 1;
+    }
+
+    // Initialize ncurses for terminal plotting
+    initscr();
+    cbreak();
+    noecho();
+    curs_set(0);  // Hide the cursor
+
+    int terminal_width = 100;  // Terminal width in characters
+    int terminal_height = 25;  // Terminal height in characters
+
+    int trail_positions_x[TRAIL_LENGTH] = {0};
+    int trail_positions_y[TRAIL_LENGTH] = {0};
+    int trail_index = 0;
+
+    int current_x, current_y;
+
+    printf("Starting mouse plotter. Press Ctrl+C to stop.\n");
+    sleep(1);  // Short delay before clearing the screen
+
+    while (1) {
+        // Read the next coordinate pair from the binary file
+        size_t read_x = fread(&current_x, sizeof(int), 1, binary_input_file);
+        size_t read_y = fread(&current_y, sizeof(int), 1, binary_input_file);
+
+        // Stop if end of file is reached
+        if (read_x != 1 || read_y != 1) {
+            break;
+        }
+
+        // Plot the current position
+        mvaddch(current_y, current_x, '*');
+        refresh();
+
+        // Clear the old position from the trail
+        if (trail_index >= TRAIL_LENGTH) {
+            int old_x = trail_positions_x[trail_index % TRAIL_LENGTH];
+            int old_y = trail_positions_y[trail_index % TRAIL_LENGTH];
+            mvaddch(old_y, old_x, ' ');  // Erase the character
+        }
+
+        // Save the current position in the trail
+        trail_positions_x[trail_index % TRAIL_LENGTH] = current_x;
+        trail_positions_y[trail_index % TRAIL_LENGTH] = current_y;
+        trail_index++;
+
+        // Add a short delay to control the plotting speed
+        usleep(10000);
+    }
+
+    // Cleanup
+    endwin();  // Exit ncurses mode
+    fclose(binary_input_file);
+
+    printf("Plotting complete. Exiting.\n");
+    return 0;
+}
+
+
+--------------
+saver 
+
+
+#include <stdio.h>
+#include <fcntl.h>
+#include <unistd.h>
+#include <signal.h>
+#include <stdlib.h>
+#include "functions.h"
+
+FILE *binary_output_file;       // File to save mouse coordinates
+float mouse_position_x = 50.0;  // Mouse starts at the center (X)
+float mouse_position_y = 12.5;  // Mouse starts at the center (Y)
+int terminal_width = 100;       // Terminal width in characters
+int terminal_height = 25;       // Terminal height in characters
+float scaling_factor_x = 1.0;   // Scaling factor for X-axis
+float scaling_factor_y = 1.0;   // Scaling factor for Y-axis
+
+/**
+ * @brief Handles SIGINT to close the file safely when the program exits.
+ */
+void handle_interrupt_signal(int signal) {
+    if (binary_output_file) {
+        fclose(binary_output_file);
+        printf("\nFile closed safely. Exiting.\n");
+    }
+    exit(0);
+}
+
+int main() {
+    const char *mouse_device = "/dev/input/mice";
+    int mouse_file_descriptor = open(mouse_device, O_RDONLY);
+    if (mouse_file_descriptor == -1) {
+        perror("Error opening mouse device");
+        return 1;
+    }
+
+    // Open the binary file for writing
+    binary_output_file = fopen("mouse_data.dat", "wb");
+    if (!binary_output_file) {
+        perror("Error opening output file");
+        close(mouse_file_descriptor);
+        return 1;
+    }
+
+    // Set up the SIGINT handler
+    signal(SIGINT, handle_interrupt_signal);
+
+    signed char mouse_data[3];
+    printf("Tracking mouse movements. Press Ctrl+C to stop.\n");
+
+    while (1) {
+        if (read(mouse_file_descriptor, mouse_data, sizeof(mouse_data)) > 0) {
+            int delta_x = mouse_data[1];  // Horizontal movement
+            int delta_y = mouse_data[2];  // Vertical movement
+
+            // Update absolute mouse positions
+            mouse_position_x += delta_x * scaling_factor_x;
+            mouse_position_y -= delta_y * scaling_factor_y;
+
+            // Clamp positions to terminal bounds
+            if (mouse_position_x < 0) mouse_position_x = 0;
+            if (mouse_position_x > terminal_width) mouse_position_x = terminal_width;
+            if (mouse_position_y < 0) mouse_position_y = 0;
+            if (mouse_position_y > terminal_height) mouse_position_y = terminal_height;
+
+            // Save coordinates as integers to the binary file
+            int scaled_x = (int)mouse_position_x;
+            int scaled_y = (int)mouse_position_y;
+            fwrite(&scaled_x, sizeof(int), 1, binary_output_file);
+            fwrite(&scaled_y, sizeof(int), 1, binary_output_file);
+
+            // Debugging output for verification
+            printf("Mouse moved to: X=%d, Y=%d\n", scaled_x, scaled_y);
+        }
+    }
+
+    close(mouse_file_descriptor);
+    return 0;
+}
+
+
+-------------
+
+FILE CREATION 
+
+
+
+#include <stdio.h>
+#include <fcntl.h>
+#include <unistd.h>
+#include <signal.h>
+#include <stdlib.h>
+#include <string.h>
+#include "functions.h"
+
+FILE *binary_output_file;       // File to save mouse coordinates
+float mouse_position_x = 50.0;  // Mouse starts at the center
+float mouse_position_y = 12.5;  // Mouse starts at the center
+int terminal_width = 100;       // Terminal width in characters
+int terminal_height = 25;       // Terminal height in characters
+float scaling_factor_x = 1.0;   // Scaling factor for X-axis
+float scaling_factor_y = 1.0;   // Scaling factor for Y-axis
+
+/**
+ * @brief Handles SIGINT to close the file safely when the program exits.
+ */
+void handle_interrupt_signal(int signal) {
+    if (binary_output_file) {
+        fclose(binary_output_file);
+        printf("\nFile closed safely. Exiting.\n");
+    }
+    exit(0);
+}
+
+/**
+ * @brief Creates a symbolic link from mouse_saver to the mouse_plotter build directory.
+ */
 void create_symlink() {
-    const char *source_path = "mouse_data.dat"; // Path to the generated file
-    const char *target_path = "../mouse_plotter/build/mouse_data.dat"; // Symlink location
+    const char *source_path = "./mouse_data.dat"; // Source file in mouse_saver/build
+    const char *target_path = "../../mouse_plotter/build/mouse_data.dat"; // Link in mouse_plotter/build
 
     // Remove existing symbolic link if it exists
     unlink(target_path);
@@ -11,4 +209,80 @@ void create_symlink() {
     } else {
         printf("Symbolic link created: %s -> %s\n", target_path, source_path);
     }
+}
+
+/**
+ * @brief Ensures the binary file exists and opens it for writing.
+ * @return FILE* Pointer to the opened file.
+ */
+FILE *ensure_file_exists(const char *file_path) {
+    // Check if the file exists
+    if (access(file_path, F_OK) == -1) {
+        printf("File '%s' does not exist. Creating it...\n", file_path);
+        FILE *file = fopen(file_path, "wb");
+        if (!file) {
+            perror("Error creating file");
+            exit(1);
+        }
+        fclose(file); // Close immediately after creating it
+    }
+
+    // Open the file for appending data
+    FILE *file = fopen(file_path, "ab");
+    if (!file) {
+        perror("Error opening file for appending");
+        exit(1);
+    }
+
+    return file;
+}
+
+int main() {
+    const char *mouse_device = "/dev/input/mice";
+    int mouse_file_descriptor = open(mouse_device, O_RDONLY);
+    if (mouse_file_descriptor == -1) {
+        perror("Error opening mouse device");
+        return 1;
+    }
+
+    // Ensure the binary file exists and open it
+    binary_output_file = ensure_file_exists("./mouse_data.dat");
+
+    // Set up the SIGINT handler
+    signal(SIGINT, handle_interrupt_signal);
+
+    // Create the symbolic link
+    create_symlink();
+
+    signed char mouse_data[3];
+    printf("Tracking mouse movements. Press Ctrl+C to stop.\n");
+
+    while (1) {
+        if (read(mouse_file_descriptor, mouse_data, sizeof(mouse_data)) > 0) {
+            int delta_x = mouse_data[1];  // Horizontal movement
+            int delta_y = mouse_data[2];  // Vertical movement
+
+            // Update absolute mouse positions
+            mouse_position_x += delta_x * scaling_factor_x;
+            mouse_position_y -= delta_y * scaling_factor_y;
+
+            // Clamp positions to terminal bounds
+            if (mouse_position_x < 0) mouse_position_x = 0;
+            if (mouse_position_x > terminal_width) mouse_position_x = terminal_width;
+            if (mouse_position_y < 0) mouse_position_y = 0;
+            if (mouse_position_y > terminal_height) mouse_position_y = terminal_height;
+
+            // Save coordinates as integers to the binary file
+            int scaled_x = (int)mouse_position_x;
+            int scaled_y = (int)mouse_position_y;
+            fwrite(&scaled_x, sizeof(int), 1, binary_output_file);
+            fwrite(&scaled_y, sizeof(int), 1, binary_output_file);
+
+            // Debugging output for verification
+            printf("Mouse moved to: X=%d, Y=%d\n", scaled_x, scaled_y);
+        }
+    }
+
+    close(mouse_file_descriptor);
+    return 0;
 }
