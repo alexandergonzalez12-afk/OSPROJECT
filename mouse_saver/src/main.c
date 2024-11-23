@@ -6,6 +6,8 @@
 #include "functions.h"
 
 FILE *output_file;  // File to save the mouse coordinates
+float min_x = 0, max_x = 0;  // Minimum and maximum X values
+float min_y = 0, max_y = 0;  // Minimum and maximum Y values
 
 /**
  * @brief Handles the SIGINT signal to safely close the output file.
@@ -16,6 +18,8 @@ void handle_sigint(int sig) {
         fclose(output_file);
         printf("\nFile closed safely. Exiting...\n");
     }
+    printf("Min X: %.2f, Max X: %.2f\n", min_x, max_x);
+    printf("Min Y: %.2f, Max Y: %.2f\n");
     exit(0);
 }
 
@@ -29,7 +33,7 @@ int main() {
 
     signed char data[3];
     float x = 50.0, y = 12.5;  // Start mouse in the middle of terminal
-    float x_scale = 1.0, y_scale = 1.0;  // Scale factors (to be updated later)
+    int term_width = 100, term_height = 25;  // Terminal dimensions
 
     // Open the file for writing
     output_file = fopen("mouse_data.dat", "wb");
@@ -51,23 +55,38 @@ int main() {
             int dy = data[2];  // Change in Y
 
             // Update absolute positions
-            x += dx * x_scale;
-            y -= dy * y_scale;  // Minus because terminal Y increases downwards
+            x += dx;
+            y -= dy;  // Minus because terminal Y increases downwards
+
+            // Track min/max values for scaling
+            if (x < min_x) min_x = x;
+            if (x > max_x) max_x = x;
+            if (y < min_y) min_y = y;
+            if (y > max_y) max_y = y;
+
+            // Calculate scaling factors
+            float x_scale = (max_x - min_x) > 0 ? (float)term_width / (max_x - min_x) : 1.0;
+            float y_scale = (max_y - min_y) > 0 ? (float)term_height / (max_y - min_y) : 1.0;
+
+            // Scale to terminal dimensions
+            float scaled_x = (x - min_x) * x_scale;
+            float scaled_y = (y - min_y) * y_scale;
 
             // Clamp values to terminal size
-            if (x < 0) x = 0;
-            if (x > 100) x = 100;
-            if (y < 0) y = 0;
-            if (y > 25) y = 25;
+            if (scaled_x < 0) scaled_x = 0;
+            if (scaled_x > term_width) scaled_x = term_width;
+            if (scaled_y < 0) scaled_y = 0;
+            if (scaled_y > term_height) scaled_y = term_height;
 
             // Save coordinates to file
-            int x_int = (int)x;
-            int y_int = (int)y;
+            int x_int = (int)scaled_x;
+            int y_int = (int)scaled_y;
             fwrite(&x_int, sizeof(int), 1, output_file);
             fwrite(&y_int, sizeof(int), 1, output_file);
 
             // Debug print
-            printf("X: %.2f, Y: %.2f (saved: %d, %d)\n", x, y, x_int, y_int);
+            printf("Raw: X=%.2f, Y=%.2f | Scaled: X=%.2f, Y=%.2f | Saved: (%d, %d)\n",
+                   x, y, scaled_x, scaled_y, x_int, y_int);
         }
     }
 
