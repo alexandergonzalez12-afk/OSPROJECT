@@ -1,20 +1,19 @@
 #include "functions.h"
-#include <signal.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
+#include <signal.h>
 #include <string.h>
 
-extern FILE *output_file;       // Declare external reference to the output file
-extern float min_x, max_x;      // External reference for min/max X values
-extern float min_y, max_y;      // External reference for min/max Y values
+// External global variables
+extern FILE *output_file;
+extern volatile int timer_expired;
 
 void HandleSigint(int sig) {
     if (output_file) {
         fclose(output_file);
         printf("\nFile closed safely. Exiting...\n");
     }
-    printf("Min X: %.2f, Max X: %.2f\n", min_x, max_x);
-    printf("Min Y: %.2f, Max Y: %.2f\n");
     exit(0);
 }
 
@@ -26,10 +25,9 @@ FILE *EnsureFileExists(const char *filePath) {
             perror("Error creating file");
             exit(1);
         }
-        fclose(file);  // Close immediately after creating it
+        fclose(file);
     }
 
-    // Open the file for appending data
     FILE *file = fopen(filePath, "ab");
     if (!file) {
         perror("Error opening file for appending");
@@ -39,14 +37,39 @@ FILE *EnsureFileExists(const char *filePath) {
     return file;
 }
 
-void CreateSymlink() {
-    const char *sourcePath = "mouse_data.dat";                // Source file in mouse_saver/build
-    const char *targetPath = "../../mouse_plotter/build/mouse_data.dat"; // Symbolic link in mouse_plotter/build
+void SetupPosixTimer(timer_t *timerId, int intervalMs) {
+    struct sigevent sev;
+    sev.sigev_notify = SIGEV_SIGNAL;
+    sev.sigev_signo = SIGRTMIN;
+    sev.sigev_value.sival_ptr = timerId;
 
-    // Remove any existing symbolic link
+    if (timer_create(CLOCK_REALTIME, &sev, timerId) == -1) {
+        perror("Error creating timer");
+        exit(1);
+    }
+
+    struct itimerspec timerSpec;
+    timerSpec.it_value.tv_sec = intervalMs / 1000;
+    timerSpec.it_value.tv_nsec = (intervalMs % 1000) * 1000000;
+    timerSpec.it_interval.tv_sec = intervalMs / 1000;
+    timerSpec.it_interval.tv_nsec = (intervalMs % 1000) * 1000000;
+
+    if (timer_settime(*timerId, 0, &timerSpec, NULL) == -1) {
+        perror("Error setting timer");
+        exit(1);
+    }
+}
+
+void TimerHandler(int sig) {
+    timer_expired = 1;
+}
+
+void CreateSymlink() {
+    const char *sourcePath = "mouse_data.dat";
+    const char *targetPath = "../../mouse_plotter/build/mouse_data.dat";
+
     unlink(targetPath);
 
-    // Create a new symbolic link
     if (symlink(sourcePath, targetPath) == -1) {
         perror("Error creating symbolic link");
     } else {
