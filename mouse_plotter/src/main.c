@@ -4,63 +4,61 @@
 #include <ncurses.h>
 #include "functions.h"
 
+/**
+ * @brief Reads coordinates from a binary file and plots them in the terminal.
+ * The function uses ncurses to draw characters at specific coordinates, scaling
+ * and clamping them to fit within the terminal dimensions.
+ * @return 0 if the program exits successfully.
+ */
 int main() {
-    const char *filePath = "mouse_data.dat";  // Path to the binary file
-    FILE *inputFile = fopen(filePath, "rb");
+    const char *file_path = "mouse_data.dat";  // Path to the binary file
+    FILE *input_file = fopen(file_path, "rb");
 
-    if (!inputFile) {
+    if (!input_file) {
         perror("Error opening binary file");
         return 1;
     }
 
     // Initialize ncurses
-    initscr();
-    cbreak();
-    noecho();
-    curs_set(0);
+    initscr();            // Start ncurses mode
+    cbreak();             // Disable line buffering
+    noecho();             // Don't show input on the screen
+    curs_set(0);          // Hide the cursor
 
-    int termWidth, termHeight;
-    int baseWidth = 100, baseHeight = 25;  // Assumed dimensions during recording
-    int x, y;
+    int term_width, term_height;          // Current terminal dimensions
+    int base_width = 100, base_height = 25;  // Dimensions during recording
+    int x, y;                             // Raw coordinates from the file
+    int scaled_x, scaled_y;               // Scaled coordinates for plotting
 
-    // Set up SIGINT handler
-    signal(SIGINT, HandleSigint);
+    printf("Plotting mouse movements. Press Ctrl+C to stop.\n");
+    sleep(1);  // Wait a moment before clearing the terminal
 
-    // GCD Timer for periodic plotting
-    SetupGCDTimer(10, ^{
-        if (fread(&x, sizeof(int), 1, inputFile) == 1 && fread(&y, sizeof(int), 1, inputFile) == 1) {
-            // Get the current terminal dimensions
-            getmaxyx(stdscr, termHeight, termWidth);
+    // Main plotting loop
+    while (fread(&x, sizeof(int), 1, input_file) == 1 &&
+           fread(&y, sizeof(int), 1, input_file) == 1) {
+        // Dynamically get the current terminal dimensions
+        GetTerminalDimensions(&term_width, &term_height);
 
-            // Rescale coordinates to fit the current terminal dimensions
-            int scaledX = x * termWidth / baseWidth;
-            int scaledY = y * termHeight / baseHeight;
+        // Rescale coordinates to fit the current terminal size
+        ScaleCoordinates(x, y, base_width, base_height, term_width, term_height, &scaled_x, &scaled_y);
 
-            // Clamp coordinates to ensure they're within bounds
-            if (scaledX < 0) scaledX = 0;
-            if (scaledX >= termWidth) scaledX = termWidth - 1;
-            if (scaledY < 0) scaledY = 0;
-            if (scaledY >= termHeight) scaledY = termHeight - 1;
+        // Clamp coordinates to ensure they're within bounds
+        ClampCoordinates(&scaled_x, &scaled_y, term_width, term_height);
 
-            // Plot the coordinate
-            mvaddch(scaledY, scaledX, '*');
-            refresh();
+        // Plot the rescaled and clamped coordinates
+        mvaddch(scaled_y, scaled_x, '*');  // Place '*' at (scaled_x, scaled_y)
+        refresh();                         // Update the screen
 
-            // Debug print (optional)
-            printf("Plotted: Raw X=%d, Y=%d | Scaled X=%d, Y=%d\n", x, y, scaledX, scaledY);
-        } else {
-            // End plotting if no more data
-            endwin();
-            fclose(inputFile);
-            exit(0);
-        }
-    });
+        // Optional debug output for raw and scaled coordinates
+        printf("Plotted: Raw X=%d, Y=%d | Scaled X=%d, Y=%d\n", x, y, scaled_x, scaled_y);
 
-    // Block main thread to keep ncurses running
-    pause();
+        // Wait 10ms before plotting the next point
+        usleep(10000);
+    }
 
-    // Clean up
-    endwin();
-    fclose(inputFile);
+    // Clean up resources
+    endwin();          // Exit ncurses mode
+    fclose(input_file); // Close the binary file
+
     return 0;
 }

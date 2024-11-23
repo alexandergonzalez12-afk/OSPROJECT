@@ -1,44 +1,46 @@
 #include "functions.h"
-#include <stdio.h>
-#include <stdlib.h>
-#include <signal.h>
-#include <unistd.h>
+#include <ncurses.h>
 
-extern FILE *output_file;
-
-void HandleSigint(int sig) {
-    if (output_file) {
-        fclose(output_file);
-        printf("\nFile closed safely. Exiting...\n");
-    }
-    exit(0);
+/**
+ * @brief Dynamically retrieves the terminal dimensions.
+ * This function uses ncurses to determine the current terminal width and height.
+ * @param[out] width Pointer to store the terminal width.
+ * @param[out] height Pointer to store the terminal height.
+ */
+void GetTerminalDimensions(int *width, int *height) {
+    getmaxyx(stdscr, *height, *width);
 }
 
-FILE *EnsureFileExists(const char *filePath) {
-    if (access(filePath, F_OK) == -1) {
-        printf("File '%s' does not exist. Creating it...\n", filePath);
-        FILE *file = fopen(filePath, "wb");
-        if (!file) {
-            perror("Error creating file");
-            exit(1);
-        }
-        fclose(file);
-    }
-
-    FILE *file = fopen(filePath, "ab");
-    if (!file) {
-        perror("Error opening file for appending");
-        exit(1);
-    }
-
-    return file;
+/**
+ * @brief Scales the given coordinates to fit the current terminal size.
+ * This function rescales coordinates from the base dimensions used during recording
+ * to the dimensions of the current terminal.
+ * @param[in] x Original X coordinate.
+ * @param[in] y Original Y coordinate.
+ * @param[in] base_width The width of the terminal during recording.
+ * @param[in] base_height The height of the terminal during recording.
+ * @param[in] term_width The current terminal width.
+ * @param[in] term_height The current terminal height.
+ * @param[out] scaled_x Pointer to store the scaled X coordinate.
+ * @param[out] scaled_y Pointer to store the scaled Y coordinate.
+ */
+void ScaleCoordinates(int x, int y, int base_width, int base_height,
+                      int term_width, int term_height, int *scaled_x, int *scaled_y) {
+    *scaled_x = x * term_width / base_width;
+    *scaled_y = y * term_height / base_height;
 }
 
-dispatch_source_t SetupGCDTimer(int intervalMs, void (^handler)(void)) {
-    dispatch_queue_t queue = dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0);
-    dispatch_source_t timer = dispatch_source_create(DISPATCH_SOURCE_TYPE_TIMER, 0, 0, queue);
-    dispatch_source_set_timer(timer, dispatch_time(DISPATCH_TIME_NOW, 0), intervalMs * NSEC_PER_MSEC, 0);
-    dispatch_source_set_event_handler(timer, handler);
-    dispatch_resume(timer);
-    return timer;
+/**
+ * @brief Clamps coordinates to fit within the terminal bounds.
+ * Ensures the given coordinates are within the range [0, width-1] and [0, height-1].
+ * @param[in,out] x Pointer to the X coordinate to clamp.
+ * @param[in,out] y Pointer to the Y coordinate to clamp.
+ * @param[in] width Terminal width.
+ * @param[in] height Terminal height.
+ */
+void ClampCoordinates(int *x, int *y, int width, int height) {
+    if (*x < 0) *x = 0;
+    if (*x >= width) *x = width - 1;
+    if (*y < 0) *y = 0;
+    if (*y >= height) *y = height - 1;
 }
