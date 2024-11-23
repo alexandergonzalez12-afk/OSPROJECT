@@ -1,0 +1,65 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <unistd.h>
+#include <ncurses.h>
+#include "functions.h"
+
+#define TRAIL_LENGTH 5  // Length of the trail effect
+
+/**
+ * @brief Reads coordinates from a binary file and plots them in the terminal
+ *        with a trailing effect.
+ * @return 0 if the program exits successfully.
+ */
+int main() {
+    const char *file_path = "mouse_data.dat";  // Path to the binary file
+    FILE *input_file = fopen(file_path, "rb");
+
+    if (!input_file) {
+        perror("Error opening binary file");
+        return 1;
+    }
+
+    // Initialize ncurses
+    initscr();
+    cbreak();
+    noecho();
+    curs_set(0);  // Hide the cursor
+
+    printf("Starting mouse plotter. Press Ctrl+C to stop.\n");
+    sleep(1);  // Brief delay before clearing
+
+    // Initialize variables for plotting
+    int x, y;
+    int trail_x[TRAIL_LENGTH] = {0};  // Store the X positions of the trail
+    int trail_y[TRAIL_LENGTH] = {0};  // Store the Y positions of the trail
+    int trail_index = 0;              // Index for the trail
+
+    while (fread(&x, sizeof(int), 1, input_file) == 1 &&
+           fread(&y, sizeof(int), 1, input_file) == 1) {
+        // Draw the current position
+        mvaddch(y, x, '*');
+        refresh();
+
+        // Clear the old position from the trail
+        if (trail_index >= TRAIL_LENGTH) {
+            int clear_x = trail_x[trail_index % TRAIL_LENGTH];
+            int clear_y = trail_y[trail_index % TRAIL_LENGTH];
+            mvaddch(clear_y, clear_x, ' ');  // Erase the character
+        }
+
+        // Save the current position in the trail
+        trail_x[trail_index % TRAIL_LENGTH] = x;
+        trail_y[trail_index % TRAIL_LENGTH] = y;
+        trail_index++;
+
+        // Add a short delay to control the plotting speed
+        usleep(10000);
+    }
+
+    // Clean up resources
+    endwin();  // Exit ncurses mode
+    fclose(input_file);
+
+    return 0;
+}
