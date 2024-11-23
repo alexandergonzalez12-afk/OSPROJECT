@@ -5,23 +5,10 @@
 #include <stdlib.h>
 #include "functions.h"
 
-FILE *output_file;  // File to save the mouse coordinates
-float min_x = 0, max_x = 0;  // Minimum and maximum X values
-float min_y = 0, max_y = 0;  // Minimum and maximum Y values
-
-/**
- * @brief Handles the SIGINT signal to safely close the output file.
- * This ensures that the file is closed before the program exits.
- */
-void handle_sigint(int sig) {
-    if (output_file) {
-        fclose(output_file);
-        printf("\nFile closed safely. Exiting...\n");
-    }
-    printf("Min X: %.2f, Max X: %.2f\n", min_x, max_x);
-    printf("Min Y: %.2f, Max Y: %.2f\n");
-    exit(0);
-}
+// Global variables for tracking file and mouse movements
+FILE *output_file = NULL;       // File to save the mouse coordinates
+float min_x = 0, max_x = 0;     // Minimum and maximum X values
+float min_y = 0, max_y = 0;     // Minimum and maximum Y values
 
 int main() {
     const char *device = "/dev/input/mice";  // Path to the mouse device
@@ -31,21 +18,19 @@ int main() {
         return 1;
     }
 
-    signed char data[3];
     float x = 50.0, y = 12.5;  // Start mouse in the middle of terminal
     int term_width = 100, term_height = 25;  // Terminal dimensions
 
-    // Open the file for writing
-    output_file = fopen("mouse_data.dat", "wb");
-    if (!output_file) {
-        perror("Error opening output file");
-        close(fd);
-        return 1;
-    }
+    // Ensure the binary file exists and open it
+    output_file = EnsureFileExists("mouse_data.dat");
 
     // Set up SIGINT handler
-    signal(SIGINT, handle_sigint);
+    signal(SIGINT, HandleSigint);
 
+    // Create the symbolic link to mouse_plotter's build directory
+    CreateSymlink();
+
+    signed char data[3];
     printf("Capturing mouse movements. Press Ctrl+C to stop.\n");
 
     while (1) {
