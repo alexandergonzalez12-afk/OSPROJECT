@@ -1,3 +1,9 @@
+
+
+---------------------------------
+
+PLOTTER: 
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -5,12 +11,12 @@
 #include "functions.h"
 
 /**
- * @brief Reads coordinates from a binary file and plots them in the terminal with a tracing effect.
- * The function uses ncurses to draw characters at specific coordinates while clearing older points.
+ * @brief Reads coordinates from a binary file and plots them in the terminal.
+ * Coordinates are scaled to fit the current terminal dimensions.
  * @return 0 if the program exits successfully.
  */
 int main() {
-    const char *file_path = "mouse_data.dat";  // Path to the binary file
+    const char *file_path = "mouse_data.dat";  // Binary file path
     FILE *input_file = fopen(file_path, "rb");
 
     if (!input_file) {
@@ -24,121 +30,133 @@ int main() {
     noecho();             // Don't show input on the screen
     curs_set(0);          // Hide the cursor
 
-    int term_width, term_height;          // Current terminal dimensions
-    int base_width = 100, base_height = 25;  // Dimensions during recording
+    int term_width, term_height;          // Terminal dimensions
+    int base_width = 100, base_height = 25;  // Logical dimensions
     int x, y;                             // Raw coordinates from the file
     int scaled_x, scaled_y;               // Scaled coordinates for plotting
-    int last_x = -1, last_y = -1;         // Coordinates of the previous point
+    int last_x = -1, last_y = -1;         // Last coordinates for tracing
 
-    printf("Plotting mouse movements, Press Ctrl+C to stop.\n");
-    sleep(1);  // Wait a moment before clearing the terminal
+    printf("Plotting mouse movements. Press Ctrl+C to stop.\n");
 
     // Main plotting loop
     while (fread(&x, sizeof(int), 1, input_file) == 1 &&
            fread(&y, sizeof(int), 1, input_file) == 1) {
-        // Dynamically get the current terminal dimensions
+        // Get current terminal dimensions
         GetTerminalDimensions(&term_width, &term_height);
 
-        // Rescale coordinates to fit the current terminal size
-        ScaleCoordinates(x, y, base_width, base_height, term_width, term_height, &scaled_x, &scaled_y);
+        // Scale coordinates to current terminal size
+        scaled_x = x * term_width / base_width;
+        scaled_y = y * term_height / base_height;
 
-        // Clamp coordinates to ensure they're within bounds
-        ClampCoordinates(&scaled_x, &scaled_y, term_width, term_height);
+        // Clamp scaled coordinates
+        if (scaled_x < 0) scaled_x = 0;
+        if (scaled_x >= term_width) scaled_x = term_width - 1;
+        if (scaled_y < 0) scaled_y = 0;
+        if (scaled_y >= term_height) scaled_y = term_height - 1;
 
-        // Clear the last plotted point (leave a fading effect by not clearing everything)
+        // Clear the last plotted character to create a tracing effect
         if (last_x != -1 && last_y != -1) {
-            mvaddch(last_y, last_x, ' ');  // Clear the previous point
+            mvaddch(last_y, last_x, ' ');
         }
 
         // Plot the new coordinate
-        mvaddch(scaled_y, scaled_x, '*');  // Place '*' at (scaled_x, scaled_y)
-        refresh();                         // Update the screen
+        mvaddch(scaled_y, scaled_x, '*');
+        refresh();  // Update the terminal
 
-        // Update the last plotted point
+        // Save the last plotted coordinate
         last_x = scaled_x;
         last_y = scaled_y;
 
-        // Debugging output (optional)
-        printf("Plotted: Raw X=%d, Y=%d | Scaled X=%d, Y=%d\n", x, y, scaled_x, scaled_y);
+        // Debug output
+        printf("Raw X: %d, Y: %d | Scaled X: %d, Y: %d\n", x, y, scaled_x, scaled_y);
 
-        // Wait 10ms before plotting the next point
+        // Wait 10ms
         usleep(10000);
     }
 
-    // Clean up resources
-    endwin();          // Exit ncurses mode
-    fclose(input_file); // Close the binary file
+    // Cleanup
+    endwin();  // Exit ncurses mode
+    fclose(input_file);
 
     return 0;
 }
 
 
-________________________________________________________________________________________
+
+
+------------------------
+SAVER
+
 #include <stdio.h>
-#include <stdlib.h>
+#include <fcntl.h>
 #include <unistd.h>
-#include <ncurses.h>
+#include <signal.h>
+#include <stdlib.h>
 #include "functions.h"
 
-#define TRAIL_LENGTH 10 // Length of the trail effect
+// Global variables
+FILE *output_file = NULL;
+float current_x = 50.0, current_y = 12.5;  // Logical start position
+float min_x = 0, max_x = 100, min_y = 0, max_y = 25;  // Logical boundaries
 
 /**
- * @brief Reads coordinates from a binary file and plots them in the terminal
- *        with a trailing effect.
- * @return 0 if the program exits successfully.
+ * @brief Handle SIGINT to safely close the output file.
  */
-int main()
-{
-    const char *file_path = "mouse_data.dat"; // Path to the binary file
-    FILE *input_file = fopen(file_path, "rb");
-    if (!input_file)
-    {
-        perror("Error opening binary file");
+void SignalHandler(int sig) {
+    if (output_file) {
+        fclose(output_file);
+        printf("\nFile closed safely. Exiting...\n");
+    }
+    exit(0);
+}
+
+int main() {
+    const char *device = "/dev/input/mice";
+    int fd = open(device, O_RDONLY);
+    if (fd == -1) {
+        perror("Error opening mouse device");
         return 1;
     }
 
-    // Initialize ncurses
-    initscr();
-    cbreak();
-    noecho();
-    curs_set(0); // Hide the cursor
+    // Open or create the binary file
+    output_file = EnsureFileExists("mouse_data.dat");
 
-    printf("Starting mouse plotter. Press Ctrl+C to stop.\n");
-    sleep(1); // Brief delay before clearing
+    // Create the symbolic link
+    CreateSymbolicLink();
 
-    // Initialize variables for plotting
-    int x, y;
-    int trail_x[TRAIL_LENGTH] = {0}; // Store the X positions of the trail
-    int trail_y[TRAIL_LENGTH] = {0}; // Store the Y positions of the trail
-    int trail_index = 0;             // Index for the trail
+    // Setup SIGINT handler
+    signal(SIGINT, SignalHandler);
 
-    while (fread(&x, sizeof(int), 1, input_file) == 1 &&
-           fread(&y, sizeof(int), 1, input_file) == 1)
-    {
-        // Draw the current position
-        mvaddch(y, x, '*');
-        refresh();
+    signed char data[3];
+    printf("Capturing mouse movements. Press Ctrl+C to stop.\n");
 
-        // Clear the old position from the trail
-        if (trail_index >= TRAIL_LENGTH)
-        {
-            int clear_x = trail_x[trail_index % TRAIL_LENGTH];
-            int clear_y = trail_y[trail_index % TRAIL_LENGTH];
-            mvaddch(clear_y, clear_x, ' '); // Erase the character
+    while (1) {
+        if (read(fd, data, sizeof(data)) > 0) {
+            int dx = data[1];
+            int dy = data[2];
+
+            // Update absolute positions
+            current_x += dx;
+            current_y -= dy;
+
+            // Clamp positions to logical terminal bounds
+            if (current_x < min_x) current_x = min_x;
+            if (current_x > max_x) current_x = max_x;
+            if (current_y < min_y) current_y = min_y;
+            if (current_y > max_y) current_y = max_y;
+
+            // Save coordinates as integers
+            int x_int = (int)current_x;
+            int y_int = (int)current_y;
+            fwrite(&x_int, sizeof(int), 1, output_file);
+            fwrite(&y_int, sizeof(int), 1, output_file);
+
+            // Debug output
+            printf("Raw DX: %d, DY: %d | Absolute X: %.2f, Y: %.2f | Saved: (%d, %d)\n",
+                   dx, dy, current_x, current_y, x_int, y_int);
         }
-
-        // Save the current position in the trail
-        trail_x[trail_index % TRAIL_LENGTH] = x;
-        trail_y[trail_index % TRAIL_LENGTH] = y;
-        trail_index++;
-
-        // Add a short delay to control the plotting speed
-        usleep(10000);
     }
 
-    // Clean up resources
-    endwin(); // Exit ncurses mode
-    fclose(input_file);
-
+    close(fd);
     return 0;
 }
