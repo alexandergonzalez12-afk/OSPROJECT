@@ -3,39 +3,70 @@
 #include <unistd.h>
 #include <signal.h>
 #include <stdlib.h>
+
 #include "functions.h"
 
+#define TERM_WIDTH 100
+#define TERM_HEIGHT 25
+
 // Global variables for tracking file and mouse movements
-FILE *output_file = NULL;       // File to save the mouse coordinates
-float min_x = 0, max_x = 0;     // Minimum and maximum X values
-float min_y = 0, max_y = 0;     // Minimum and maximum Y values
+FILE *output_file = NULL;             // File to save the mouse coordinates
+FILE *output_transformed_file = NULL; // File to save the transformed coordinates
+float min_x, max_x;                   // Minimum and maximum X values
+float min_y, max_y;                   // Minimum and maximum Y values
+float x = 0, y = 0;                   // Start mouse in the middle of terminal
 
 /**
  * @brief Handles SIGINT (Ctrl+C) to safely close the output file and exit.
  */
-void SignalHandler(int sig) {
-    if (output_file) {
+void SignalHandler(int sig)
+{
+    if (output_file && output_transformed_file)
+    {
+        rewind(output_file);             // Go back to the beginning of the raw data file
+        rewind(output_transformed_file); // Go back to the beginning of the raw data file
+
+        // Process each pair of raw coordinates and apply the scaling
+        while (fread(&x, sizeof(float), 1, output_file) > 0 &&
+               fread(&y, sizeof(float), 1, output_file) > 0)
+        {
+            // Apply scaling transformation to the raw coordinates
+            int scaled_x = ((x - min_x) / (max_x - min_x)) * (TERM_WIDTH - 1);
+            int scaled_y = ((y - min_y) / (max_y - min_y)) * (TERM_HEIGHT - 1);
+
+            // Write the scaled coordinates to a new file
+            fwrite(&scaled_x, sizeof(int), 1, output_transformed_file);
+            fwrite(&scaled_y, sizeof(int), 1, output_transformed_file);
+
+            // Debug print
+            printf("Scaled: X=%d, Y=%d | MAX: X=%.2f, Y=%.2f | MIN: X=%.2f, Y=%.2f\n",
+                   scaled_x, scaled_y, max_x, max_y, min_x, min_y);
+        }
+
+        // Close both files safely
         fclose(output_file);
+        fclose(output_transformed_file);
         printf("\nFile closed safely. Exiting...\n");
+        printf("Min X: %.2f, Max X: %.2f\n", min_x, max_x);
+        printf("Min Y: %.2f, Max Y: %.2f\n", min_y, max_y);
     }
-    printf("Min X: %.2f, Max X: %.2f\n", min_x, max_x);
-    printf("Min Y: %.2f, Max Y: %.2f\n");
     exit(0);
 }
 
-int main() {
-    const char *device = "/dev/input/mice";  // Path to the mouse device
+int main()
+{
+    const char *device = "/dev/input/mice"; // Path to the mouse device
     int fd = open(device, O_RDONLY);
-    if (fd == -1) {
+    if (fd == -1)
+    {
         perror("Error opening mouse device");
         return 1;
     }
 
-    float x = 50.0, y = 12.5;  // Start mouse in the middle of terminal
-    int term_width = 100, term_height = 25;  // Fixed terminal dimensions
-
-    // Ensure the binary file exists and open it
-    output_file = EnsureFileExists("mouse_data.dat");
+    // Ensure the binary file exists and open it for raw data
+    output_file = EnsureFileExists("mouse_raw_data.dat");
+    // Open a new file to store the transformed coordinates
+    output_transformed_file = EnsureFileExists("mouse_data.dat");
 
     // Set up SIGINT handler
     signal(SIGINT, SignalHandler);
@@ -46,47 +77,50 @@ int main() {
     signed char data[3];
     printf("Capturing mouse movements. Press Ctrl+C to stop.\n");
 
-    while (1) {
+    int gate = 1;
+
+    while (1)
+    {
         // Read mouse data
-        if (read(fd, data, sizeof(data)) > 0) {
-            int dx = data[1];  // Change in X
-            int dy = data[2];  // Change in Y
+        if (read(fd, data, sizeof(data)) > 0)
+        {
+            int dx = data[1]; // Change in X
+            int dy = data[2]; // Change in Y
 
             // Update absolute positions
             x += dx;
-            y -= dy;  // Minus because terminal Y increases downwards
+            y -= dy; // Minus because terminal Y increases downwards
+            if (gate == 1)
+            {
+                gate = 0;
+                min_x = x;
+                max_x = x;
+                min_y = y;
+                max_y = y;
+            }
+            else
+            {
+                // Track min/max values for scaling
+                if (x < min_x)
+                    min_x = x;
+                if (x > max_x)
+                    max_x = x;
+                if (y < min_y)
+                    min_y = y;
+                if (y > max_y)
+                    max_y = y;
+            }
 
-            // Track min/max values for scaling
-            if (x < min_x) min_x = x;
-            if (x > max_x) max_x = x;
-            if (y < min_y) min_y = y;
-            if (y > max_y) max_y = y;
-
-            // Normalize and scale to fixed terminal dimensions
-            float x_scale = (max_x - min_x) > 0 ? (float)term_width / (max_x - min_x) : 1.0;
-            float y_scale = (max_y - min_y) > 0 ? (float)term_height / (max_y - min_y) : 1.0;
-
-            float normalized_x = (x - min_x) * x_scale;
-            float normalized_y = (y - min_y) * y_scale;
-
-            // Clamp values to terminal size
-            if (normalized_x < 0) normalized_x = 0;
-            if (normalized_x > term_width) normalized_x = term_width;
-            if (normalized_y < 0) normalized_y = 0;
-            if (normalized_y > term_height) normalized_y = term_height;
-
-            // Save normalized coordinates to file
-            int x_int = (int)normalized_x;
-            int y_int = (int)normalized_y;
-            fwrite(&x_int, sizeof(int), 1, output_file);
-            fwrite(&y_int, sizeof(int), 1, output_file);
+            // Write the raw coordinates to the file
+            fwrite(&x, sizeof(float), 1, output_file);
+            fwrite(&y, sizeof(float), 1, output_file);
 
             // Debug print
-            printf("Raw: X=%.2f, Y=%.2f | Normalized: X=%.2f, Y=%.2f | Saved: (%d, %d)\n",
-                   x, y, normalized_x, normalized_y, x_int, y_int);
+            printf("Raw: X=%.2f, Y=%.2f | MAX: X=%.2f, Y=%.2f | MIN: X=%.2f, Y=%.2f\n",
+                   x, y, max_x, max_y, min_x, min_y);
+
+            // Ensure data is written to disk
+            fflush(output_file);
         }
     }
-
-    close(fd);
-    return 0;
 }

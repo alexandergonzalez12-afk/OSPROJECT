@@ -7,7 +7,8 @@
  * @param[out] width Pointer to store the terminal width.
  * @param[out] height Pointer to store the terminal height.
  */
-void GetTerminalDimensions(int *width, int *height) {
+void GetTerminalDimensions(int *width, int *height)
+{
     getmaxyx(stdscr, *height, *width);
 }
 
@@ -25,7 +26,8 @@ void GetTerminalDimensions(int *width, int *height) {
  * @param[out] scaled_y Pointer to store the scaled Y coordinate.
  */
 void ScaleCoordinates(int x, int y, int base_width, int base_height,
-                      int term_width, int term_height, int *scaled_x, int *scaled_y) {
+                      int term_width, int term_height, int *scaled_x, int *scaled_y)
+{
     *scaled_x = x * term_width / base_width;
     *scaled_y = y * term_height / base_height;
 }
@@ -38,9 +40,14 @@ void ScaleCoordinates(int x, int y, int base_width, int base_height,
  * @param[in] width Terminal width.
  * @param[in] height Terminal height.
  */
-void ClampCoordinates(int *x, int *y, int width, int height) {
-    if (*x < 0) *x = 0;
-    if (*x >= width) *x = width - 1;
-    if (*y < 0) *y = 0;
-    if (*y >= height) *y = height - 1;
+void ClampCoordinates(int *x, int *y, int width, int height)
+{
+    if (*x < 0)
+        *x = 0;
+    if (*x >= width)
+        *x = width - 1;
+    if (*y < 0)
+        *y = 0;
+    if (*y >= height)
+        *y = height - 1;
 }
