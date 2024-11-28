@@ -4,10 +4,12 @@
 #include <string.h>
 #include <unistd.h>
 
+
 /**
  * @brief Handles SIGINT (Ctrl+C) to safely close the output file and exit.
+ * 
+ * @param sig The signal number.
  */
-
 void SignalHandler(int sig) {
   fclose(output_file);
   fopen("mouse_raw_data.dat", "rb");
