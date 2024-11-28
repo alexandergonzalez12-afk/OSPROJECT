@@ -10,7 +10,7 @@
 void SignalHandler(int sig)
 {
     fclose(output_file);
-    fopen(output_file, rb);
+    fopen("mouse_raw_data.dat", "rb");
     if (output_file && output_transformed_file)
     {
         rewind(output_file);             // Go back to the beginning of the raw data file
@@ -21,10 +21,10 @@ void SignalHandler(int sig)
                fread(&y, sizeof(float), 1, output_file) > 0)
         {
             // Apply scaling transformation to the raw coordinates
-            int scaled_x = ((x - min_x) / (max_x - min_x)) * (TERM_WIDTH - 1);
-            int scaled_y = ((y - min_y) / (max_y - min_y)) * (TERM_HEIGHT - 1);
+            int scaled_x = ((x - min_x) / (max_x - min_x)) * (TERM_WIDTH - 1) * .80;
+            int scaled_y = ((y - min_y) / (max_y - min_y)) * (TERM_HEIGHT - 1) * .80;
 
-            // Write the scaled coordinates to a new file
+            // Write the shifted coordinates to a new file
             fwrite(&scaled_x, sizeof(int), 1, output_transformed_file);
             fwrite(&scaled_y, sizeof(int), 1, output_transformed_file);
 
