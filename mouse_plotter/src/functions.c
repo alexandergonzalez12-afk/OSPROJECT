@@ -1,53 +1,53 @@
 #include "functions.h"
+#include <signal.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <time.h>
+#include <unistd.h>
 #include <ncurses.h>
 
-/**
- * @brief Dynamically retrieves the terminal dimensions.
- * This function uses ncurses to determine the current terminal width and height.
- * @param[out] width Pointer to store the terminal width.
- * @param[out] height Pointer to store the terminal height.
- */
-void GetTerminalDimensions(int *width, int *height)
-{
-    getmaxyx(stdscr, *height, *width);
-}
+// Define global variables here
+FILE *input_file = NULL;
+const char *file_path = "mouse_data.dat"; // Path to the binary file
+int trail_x[TRAIL_LENGTH] = {0};          // Trail X positions
+int trail_y[TRAIL_LENGTH] = {0};          // Trail Y positions
+int trail_index = 0;                      // Current trail index
+int x = 0, y = 0;                         // Coordinates from file
 
-/**
- * @brief Scales the given coordinates to fit the current terminal size.
- * This function rescales coordinates from the base dimensions used during recording
- * to the dimensions of the current terminal.
- * @param[in] x Original X coordinate.
- * @param[in] y Original Y coordinate.
- * @param[in] base_width The width of the terminal during recording.
- * @param[in] base_height The height of the terminal during recording.
- * @param[in] term_width The current terminal width.
- * @param[in] term_height The current terminal height.
- * @param[out] scaled_x Pointer to store the scaled X coordinate.
- * @param[out] scaled_y Pointer to store the scaled Y coordinate.
- */
-void ScaleCoordinates(int x, int y, int base_width, int base_height,
-                      int term_width, int term_height, int *scaled_x, int *scaled_y)
+void DrawTrace(int signum)
 {
-    *scaled_x = x * term_width / base_width;
-    *scaled_y = y * term_height / base_height;
-}
+    fread(&x, sizeof(int), 1, input_file);
+    fread(&y, sizeof(int), 1, input_file);
 
-/**
- * @brief Clamps coordinates to fit within the terminal bounds.
- * Ensures the given coordinates are within the range [0, width-1] and [0, height-1].
- * @param[in,out] x Pointer to the X coordinate to clamp.
- * @param[in,out] y Pointer to the Y coordinate to clamp.
- * @param[in] width Terminal width.
- * @param[in] height Terminal height.
- */
-void ClampCoordinates(int *x, int *y, int width, int height)
-{
-    if (*x < 0)
-        *x = 0;
-    if (*x >= width)
-        *x = width - 1;
-    if (*y < 0)
-        *y = 0;
-    if (*y >= height)
-        *y = height - 1;
+    // Plot the current position
+    mvaddch(y, x, '*');
+    refresh();
+
+    // Clear trail character
+    if (trail_index >= TRAIL_LENGTH)
+    {
+        int clear_x = trail_x[trail_index % TRAIL_LENGTH];
+        int clear_y = trail_y[trail_index % TRAIL_LENGTH];
+        mvaddch(clear_y, clear_x, ' '); // Clear old character
+    }
+
+    // Update trail
+    trail_x[trail_index % TRAIL_LENGTH] = x;
+    trail_y[trail_index % TRAIL_LENGTH] = y;
+    trail_index++;
+
+    if (feof(input_file))
+    {
+        mvprintw(0, 0, "End of data. Exiting...");
+        refresh();
+        sleep(1);
+        endwin();
+        fclose(input_file);
+        exit(EXIT_SUCCESS);
+    }
+    else if (ferror(input_file))
+    {
+        mvprintw(0, 0, "Error reading file.");
+        refresh();
+    }
 }
