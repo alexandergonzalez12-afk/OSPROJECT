@@ -66,23 +66,23 @@ void SignalHandler(int sig) {
  * build directory.
  */
 void CreateSymbolicLink() {
-  const char *sourcePath =
+  const char *source_path =
       "../../mouse_saver/build/mouse_data.dat";  // Source file from mouse_saver
                                                  // build directory
-  const char *targetPath =
+  const char *target_path =
       "../../mouse_plotter/build/mouse_data.dat";  // Symbolic link target in
                                                    // mouse_plotter build
                                                    // directory
 
   // Remove any existing symbolic link if it exists
-  unlink(targetPath);
+  unlink(target_path);
 
   // Create a new symbolic link from the source to the target path
-  if (symlink(sourcePath, targetPath) == -1) {
+  if (symlink(source_path, target_path) == -1) {
     perror("Error creating symbolic link");  // If symlink creation fails, print
                                              // an error
   } else {
-    printf("Symbolic link created: %s -> %s\n", targetPath,
-           sourcePath);  // Confirmation of symlink creation
+    printf("Symbolic link created: %s -> %s\n", target_path,
+           source_path);  // Confirmation of symlink creation
   }
 }

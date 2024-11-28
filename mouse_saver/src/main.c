@@ -65,8 +65,9 @@ int main() {
       y -= dy;  // Update Y position (inverted because terminal Y increases
                 // downward)
 
+      // On the first reading, initialize min/max values
       if (gate == 1) {
-        gate = 0;   // On the first reading, initialize min/max values
+        gate = 0;
         min_x = x;  // Set initial min_x to the current X position
         max_x = x;  // Set initial max_x to the current X position
         min_y = y;  // Set initial min_y to the current Y position
