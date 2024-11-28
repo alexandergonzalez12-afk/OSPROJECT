@@ -57,7 +57,7 @@ void CreateSymbolicLink() {
   // Remove any existing symbolic link
   unlink(targetPath);
 
-  // Create a new symbolic link
+
   if (symlink(sourcePath, targetPath) == -1) {
     perror("Error creating symbolic link");
   } else {
