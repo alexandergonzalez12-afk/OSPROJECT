@@ -6,6 +6,19 @@
 #include <unistd.h>
 
 #include "functions.h"
+/**
+ * @file main.c
+ * @brief Main function to initialize and start the mouse plotter.
+ * 
+ * This function sets up the signal handler, configures and starts the POSIX timer,
+ * initializes ncurses, and enters an infinite loop to wait for signals.
+ * 
+ * @return int Returns 0 on successful execution, or 1 if an error occurs.
+ * 
+ * @authors
+ * Alexander J. Gonzalez Suarez
+ * Alex J. Strubbe Martinez
+ */
 
 /**
  * @brief Main function to initialize and start the mouse plotter.

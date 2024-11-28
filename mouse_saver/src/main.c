@@ -5,7 +5,12 @@
 #include <unistd.h>
 
 #include "functions.h"
-
+/**
+ * @file main.c
+ * @brief This file contains the main function for tracking and saving mouse movements.
+ * 
+ * This code was created by Alexander J. Gonzalez Suarez and Alex J. Strubbe Martinez.
+ */
 // Global variables for tracking file and mouse movements
 FILE *output_file = NULL;  // File to save the mouse coordinates
 FILE *output_transformed_file =
