@@ -5,7 +5,7 @@
 
 #define TRAIL_LENGTH 10  // Length of the trail effect
 
-// Declare variables as extern
+
 
 /**
  * @brief File pointer to the input binary file containing mouse data.
